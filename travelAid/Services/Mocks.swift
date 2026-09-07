@@ -35,6 +35,7 @@ struct MockItineraryService: ItineraryService {
     func buildItinerary(
         destination: Destination,
         duration: Int,
+        startDate: Date,
         persona: TravelerPersona,
         weather: [Weather]
     ) async throws -> Trip {
@@ -65,7 +66,7 @@ struct MockItineraryService: ItineraryService {
             destination: destination.name,
             duration: duration,
             dayPlans: dayPlans,
-            startDate: Date(),
+            startDate: startDate,
             persona: persona
         )
     }

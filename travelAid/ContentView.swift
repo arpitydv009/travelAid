@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct ContentView: View {
     var body: some View {
@@ -14,13 +15,19 @@ struct ContentView: View {
 }
 
 private struct HomeView: View {
-    @State private var destination = ""
-    @State private var tripDuration = 5
-    @State private var selectedPersona: TravelerPersona = .backpacker
+    @Environment(\.modelContext) private var modelContext
+    @StateObject private var viewModel = HomeViewModel(
+        locationService: MapKitLocationService(),
+        weatherService: OpenMeteoWeatherService(),
+        itineraryService: DeterministicItineraryService(),
+        aiService: nil
+    )
+    @StateObject private var autocomplete = DestinationAutocompleteService()
 
-    private var canGenerateTrip: Bool {
-        !destination.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
+    @State private var showSavedTrips = false
+    @FocusState private var destinationFieldFocused: Bool
+
+    private var canGenerateTrip: Bool { viewModel.canGenerate }
 
     var body: some View {
         NavigationStack {
@@ -29,6 +36,7 @@ private struct HomeView: View {
                     header
                     destinationSection
                     durationSection
+                    startDateSection
                     personaSection
                     generateButton
                 }
@@ -37,6 +45,67 @@ private struct HomeView: View {
             }
             .background(Color(.systemGroupedBackground))
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: { showSavedTrips = true }) {
+                        Image(systemName: "tray.full")
+                    }
+                    .accessibilityLabel("My Trips")
+                }
+            }
+            .overlay {
+                if viewModel.isGenerating {
+                    ProgressView(viewModel.progressText ?? "Planning your trip...")
+                        .padding()
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                        .shadow(radius: 8)
+                        .onTapGesture {
+                            // allow tap to cancel for dev convenience
+                            viewModel.cancelGeneration()
+                        }
+                }
+            }
+            .sheet(isPresented: $showSavedTrips) {
+                MyTripsView()
+            }
+            .alert(
+                "Trip generation issue",
+                isPresented: Binding(
+                    get: { viewModel.errorMessage != nil },
+                    set: { if !$0 { viewModel.clearError() } }
+                )
+            ) {
+                Button("OK", role: .cancel) { viewModel.clearError() }
+            } message: {
+                Text(viewModel.errorMessage ?? "")
+            }
+            .sheet(
+                isPresented: Binding(
+                    get: { viewModel.generatedTrip != nil },
+                    set: { newValue in if !newValue { viewModel.clearGeneratedTrip() } }
+                ),
+                content: {
+                    if let trip = viewModel.generatedTrip {
+                        ItineraryView(
+                            trip: trip,
+                            onSave: {
+                                Task {
+                                    do {
+                                        let storage = SwiftDataStorageService(modelContext: modelContext)
+                                        try await storage.saveTrip(trip)
+                                        print("Trip saved: \(trip.destination)")
+                                        viewModel.clearGeneratedTrip()
+                                    } catch {
+                                        print("Failed to save trip: \(error)")
+                                    }
+                                }
+                            }
+                        )
+                    } else {
+                        EmptyView()
+                    }
+                }
+            )
         }
     }
 
@@ -66,16 +135,54 @@ private struct HomeView: View {
         VStack(alignment: .leading, spacing: 12) {
             SectionTitle(title: "Where are you going?", systemImage: "magnifyingglass")
 
-            HStack(spacing: 12) {
-                Image(systemName: "building.2.crop.circle")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
+                VStack(spacing: 8) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "building.2.crop.circle")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
 
-                TextField("Search for a city", text: $destination)
-                    .textInputAutocapitalization(.words)
-                    .submitLabel(.done)
-            }
+                        TextField("Search for a city", text: $viewModel.destination)
+                            .textInputAutocapitalization(.words)
+                            .submitLabel(.done)
+                            .focused($destinationFieldFocused)
+                            .onChange(of: viewModel.destination) { _, newValue in
+                                autocomplete.updateQuery(newValue)
+                            }
+                    }
+
+                    if destinationFieldFocused && !autocomplete.suggestions.isEmpty {
+                        // suggestion list
+                        VStack(spacing: 0) {
+                            ForEach(autocomplete.suggestions, id: \.self) { suggestion in
+                                Button {
+                                    withAnimation {
+                                        viewModel.destination = suggestion
+                                        destinationFieldFocused = false
+                                        autocomplete.clear()
+                                    }
+                                } label: {
+                                    HStack {
+                                        Text(suggestion)
+                                            .foregroundStyle(.primary)
+                                        Spacer()
+                                    }
+                                    .padding(.vertical, 10)
+                                    .padding(.horizontal, 12)
+                                }
+                                .buttonStyle(.plain)
+
+                                Divider()
+                            }
+                        }
+                        .background(.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(Color(.quaternaryLabel), lineWidth: 0.5)
+                        }
+                        .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 2)
+                    }
+                }
             .padding(16)
             .background(.background, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay {
@@ -92,26 +199,22 @@ private struct HomeView: View {
 
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text("\(tripDuration)")
+                    Text("\(viewModel.duration)")
                         .font(.system(size: 44, weight: .bold, design: .rounded))
                         .contentTransition(.numericText())
 
-                    Text(tripDuration == 1 ? "day" : "days")
+                    Text(viewModel.duration == 1 ? "day" : "days")
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(.secondary)
 
-                    Spacer()
-
-                    Stepper("Trip duration", value: $tripDuration, in: 1...14)
-                        .labelsHidden()
                 }
 
                 Slider(value: Binding(
-                    get: { Double(tripDuration) },
-                    set: { tripDuration = Int($0.rounded()) }
+                    get: { Double(viewModel.duration) },
+                    set: { viewModel.duration = Int($0.rounded()) }
                 ), in: 1...14, step: 1)
                 .accessibilityLabel("Trip duration")
-                .accessibilityValue("\(tripDuration) \(tripDuration == 1 ? "day" : "days")")
+                .accessibilityValue("\(viewModel.duration) \(viewModel.duration == 1 ? "day" : "days")")
 
                 HStack {
                     Text("Quick weekend")
@@ -126,6 +229,33 @@ private struct HomeView: View {
         }
     }
 
+    private var startDateSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            SectionTitle(title: "When does the trip start?", systemImage: "calendar.badge.clock")
+
+            VStack(alignment: .leading, spacing: 12) {
+                DatePicker(
+                    "Start date",
+                    selection: $viewModel.startDate,
+                    in: Date.now...,
+                    displayedComponents: [.date]
+                )
+                .datePickerStyle(.compact)
+                .labelsHidden()
+
+                Text(viewModel.startDate.formatted(date: .long, time: .omitted))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                Text("This is the first day of the trip shown in the overview and itinerary.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(18)
+            .background(.background, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        }
+    }
+
     private var personaSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionTitle(title: "What kind of traveler are you?", systemImage: "person.crop.circle")
@@ -134,10 +264,10 @@ private struct HomeView: View {
                 ForEach(TravelerPersona.allCases) { persona in
                     PersonaOption(
                         persona: persona,
-                        isSelected: selectedPersona == persona
+                        isSelected: viewModel.persona == persona
                     ) {
                         withAnimation(.snappy(duration: 0.2)) {
-                            selectedPersona = persona
+                            viewModel.persona = persona
                         }
                     }
                 }
@@ -147,7 +277,7 @@ private struct HomeView: View {
 
     private var generateButton: some View {
         Button {
-            // Trip generation starts in a later phase.
+            viewModel.generateTrip()
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "sparkles")
@@ -182,60 +312,77 @@ private struct PersonaOption: View {
     let isSelected: Bool
     let action: () -> Void
 
+    private var iconBackground: Color {
+        isSelected ? persona.tint.opacity(0.18) : Color(.secondarySystemGroupedBackground)
+    }
+
+    private var iconColor: Color {
+        isSelected ? persona.tint : .secondary
+    }
+
+    private var borderColor: Color {
+        isSelected ? persona.tint.opacity(0.75) : .clear
+    }
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 14) {
-                ZStack {
-                    Circle()
-                        .fill(isSelected ? persona.tint.opacity(0.18) : Color(.secondarySystemGroupedBackground))
-                        .frame(width: 46, height: 46)
-
-                    Image(systemName: persona.systemImage)
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(isSelected ? persona.tint : .secondary)
-                }
-                .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(persona.title)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-
-                    Text(persona.subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                personaIcon
+                personaText
 
                 Spacer(minLength: 12)
 
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(isSelected ? persona.tint : .tertiary)
-                    .accessibilityHidden(true)
+                selectionIcon
             }
             .padding(16)
             .background(.background, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(isSelected ? persona.tint.opacity(0.75) : .quaternary, lineWidth: isSelected ? 1.5 : 1)
+                    .stroke(borderColor, lineWidth: 1.5)
             }
             .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(persona.accessibilityLabel)
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
-        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private var personaIcon: some View {
+        ZStack {
+            Circle()
+                .fill(iconBackground)
+                .frame(width: 46, height: 46)
+
+            Image(systemName: persona.systemImage)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(iconColor)
+        }
+        .accessibilityHidden(true)
+    }
+
+    private var personaText: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(persona.title)
+                .font(.headline)
+                .foregroundStyle(.primary)
+
+            Text(persona.subtitle)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var selectionIcon: some View {
+        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+            .font(.title3.weight(.semibold))
+            .foregroundStyle(isSelected ? persona.tint : Color(.tertiaryLabel))
+            .accessibilityHidden(true)
     }
 }
 
-private enum TravelerPersona: String, CaseIterable, Identifiable {
-    case backpacker
-    case luxury
-    case family
-
-    var id: String { rawValue }
-
+private extension TravelerPersona {
     var title: String {
         switch self {
         case .backpacker:

@@ -10,6 +10,7 @@ import Foundation
 final class HomeViewModel: HomeViewModelProtocol, ObservableObject {
     @Published var destination: String
     @Published var duration: Int
+    @Published var startDate: Date
     @Published var persona: TravelerPersona
     @Published private(set) var isGenerating: Bool = false
     @Published private(set) var progressText: String?
@@ -29,6 +30,7 @@ final class HomeViewModel: HomeViewModelProtocol, ObservableObject {
     init(
         destination: String = "",
         duration: Int = 5,
+        startDate: Date = .now,
         persona: TravelerPersona = .backpacker,
         locationService: LocationService,
         weatherService: WeatherService,
@@ -37,6 +39,7 @@ final class HomeViewModel: HomeViewModelProtocol, ObservableObject {
     ) {
         self.destination = destination
         self.duration = duration
+        self.startDate = startDate
         self.persona = persona
         self.locationService = locationService
         self.weatherService = weatherService
@@ -68,6 +71,7 @@ final class HomeViewModel: HomeViewModelProtocol, ObservableObject {
         generatedTrip = nil
 
         let requestedDuration = duration
+        let requestedStartDate = startDate
         let requestedPersona = persona
 
         generationTask = Task { [weak self] in
@@ -94,6 +98,7 @@ final class HomeViewModel: HomeViewModelProtocol, ObservableObject {
                 let basicTrip = try await buildItinerary(
                     destination: destination,
                     duration: requestedDuration,
+                    startDate: requestedStartDate,
                     persona: requestedPersona,
                     weather: weather
                 )
@@ -128,6 +133,14 @@ final class HomeViewModel: HomeViewModelProtocol, ObservableObject {
         finishCancelledGeneration()
     }
 
+    func clearError() {
+        errorMessage = nil
+    }
+
+    func clearGeneratedTrip() {
+        generatedTrip = nil
+    }
+
     func reset() {
         cancelGeneration()
         destination = ""
@@ -143,8 +156,8 @@ final class HomeViewModel: HomeViewModelProtocol, ObservableObject {
 
     private func resolveDestination(named name: String) async throws -> Destination {
         do {
-            return try await withTimeout(seconds: 8) {
-                try await locationService.resolvePlace(named: name)
+            return try await withTimeout(seconds: 5) {
+                try await self.locationService.resolvePlace(named: name)
             }
         } catch is CancellationError {
             throw CancellationError()
@@ -155,8 +168,8 @@ final class HomeViewModel: HomeViewModelProtocol, ObservableObject {
 
     private func fetchWeather(for destination: Destination, days: Int) async -> [Weather] {
         do {
-            return try await withTimeout(seconds: 8) {
-                try await weatherService.fetchWeatherForecast(
+            return try await withTimeout(seconds: 5) {
+                try await self.weatherService.fetchWeatherForecast(
                     for: destination.coordinates,
                     days: days
                 )
@@ -172,14 +185,16 @@ final class HomeViewModel: HomeViewModelProtocol, ObservableObject {
     private func buildItinerary(
         destination: Destination,
         duration: Int,
+        startDate: Date,
         persona: TravelerPersona,
         weather: [Weather]
     ) async throws -> Trip {
         do {
-            return try await withTimeout(seconds: 12) {
-                try await itineraryService.buildItinerary(
+            return try await withTimeout(seconds: 8) {
+                try await self.itineraryService.buildItinerary(
                     destination: destination,
                     duration: duration,
+                    startDate: startDate,
                     persona: persona,
                     weather: weather
                 )
@@ -197,7 +212,7 @@ final class HomeViewModel: HomeViewModelProtocol, ObservableObject {
         progressText = "Personalizing recommendations..."
 
         do {
-            return try await withTimeout(seconds: 6) {
+            return try await withTimeout(seconds: 4) {
                 try await aiService.enhance(trip: trip)
             }
         } catch {
@@ -242,7 +257,7 @@ final class HomeViewModel: HomeViewModelProtocol, ObservableObject {
 
     private func withTimeout<T>(
         seconds: TimeInterval,
-        operation: @escaping @Sendable () async throws -> T
+        operation: @escaping () async throws -> T
     ) async throws -> T {
         try await withThrowingTaskGroup(of: T.self) { group in
             group.addTask {

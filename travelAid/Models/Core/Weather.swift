@@ -3,9 +3,9 @@
 //  travelAid
 //
 
-import SwiftUI
+import Foundation
 
-struct Weather: Codable {
+struct Weather: Codable, Sendable {
     let temperature: Int
     let condition: WeatherCondition
     let precipitationChance: Int

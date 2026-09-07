@@ -3,9 +3,9 @@
 //  travelAid
 //
 
-import SwiftUI
+import Foundation
 
-enum TravelerPersona: String, CaseIterable, Codable, Identifiable {
+enum TravelerPersona: String, CaseIterable, Codable, Identifiable, Sendable {
     case backpacker
     case luxury
     case family
@@ -13,7 +13,7 @@ enum TravelerPersona: String, CaseIterable, Codable, Identifiable {
     var id: String { rawValue }
 }
 
-enum ActivityType: String, CaseIterable, Codable {
+enum ActivityType: String, CaseIterable, Codable, Sendable {
     case museum
     case restaurant
     case park
@@ -32,13 +32,13 @@ enum ActivityType: String, CaseIterable, Codable {
     case localExperience
 }
 
-enum CostLevel: String, CaseIterable, Codable {
+enum CostLevel: String, CaseIterable, Codable, Sendable {
     case cheap
     case medium
     case expensive
 }
 
-enum MealType: String, Codable {
+enum MealType: String, Codable, Sendable {
     case breakfast
     case lunch
     case dinner
@@ -46,7 +46,7 @@ enum MealType: String, Codable {
     case none
 }
 
-enum WeatherCondition: String, CaseIterable, Codable {
+enum WeatherCondition: String, CaseIterable, Codable, Sendable {
     case sunny
     case cloudy
     case rainy

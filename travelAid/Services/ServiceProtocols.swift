@@ -3,6 +3,7 @@
 //  travelAid
 //
 
+import Foundation
 import CoreLocation
 
 struct Destination {
@@ -19,7 +20,7 @@ protocol WeatherService: Sendable {
 }
 
 protocol ItineraryService: Sendable {
-    func buildItinerary(destination: Destination, duration: Int, persona: TravelerPersona, weather: [Weather]) async throws -> Trip
+    func buildItinerary(destination: Destination, duration: Int, startDate: Date, persona: TravelerPersona, weather: [Weather]) async throws -> Trip
 }
 
 protocol AIService: Sendable {

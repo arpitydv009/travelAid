@@ -3,7 +3,7 @@
 //  travelAid
 //
 
-import SwiftUI
+import Foundation
 import SwiftData
 
 @Model final class DayPlan {

@@ -4,11 +4,13 @@
 //
 
 import Combine
+import Foundation
 
 @MainActor
 protocol HomeViewModelProtocol: ObservableObject {
     var destination: String { get set }
     var duration: Int { get set }
+    var startDate: Date { get set }
     var persona: TravelerPersona { get set }
     var isGenerating: Bool { get }
     var progressText: String? { get }
@@ -18,5 +20,7 @@ protocol HomeViewModelProtocol: ObservableObject {
 
     func generateTrip()
     func cancelGeneration()
+    func clearError()
+    func clearGeneratedTrip()
     func reset()
 }

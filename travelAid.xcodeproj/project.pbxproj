@@ -10,9 +10,26 @@
 		2B8C6F733042AA67007CCA83 /* travelAid.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = travelAid.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		2B8C6FBA3042C639007CCA83 /* Exceptions for "travelAid" folder in "travelAid" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Models/Activity.swift,
+				Models/DayPlan.swift,
+				Models/Enums.swift,
+				Models/Trip.swift,
+				Models/Weather.swift,
+			);
+			target = 2B8C6F723042AA67007CCA83 /* travelAid */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		2B8C6F753042AA67007CCA83 /* travelAid */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				2B8C6FBA3042C639007CCA83 /* Exceptions for "travelAid" folder in "travelAid" target */,
+			);
 			path = travelAid;
 			sourceTree = "<group>";
 		};
