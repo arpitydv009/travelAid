@@ -186,4 +186,3 @@ The project is starting from a blank SwiftUI application and is being developed 
 
 ---
 
-Built with ❤️ using SwiftUI.
